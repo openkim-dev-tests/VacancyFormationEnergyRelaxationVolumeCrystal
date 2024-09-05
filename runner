@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+
+from test_driver.test_driver import TestDriver
+from ast import literal_eval
+
+test_level_optional_inputs = {}
+model_name = input('Model name?\n')
+print(model_name)
+stoichiometric_species = literal_eval(input('Stoichiometric species (literal list of strings)?\n'))
+print(stoichiometric_species)
+prototype_labels = literal_eval(input('Prototype labels?\n'))
+print(prototype_labels)
+parameter_names = literal_eval(input('Parameter names?\n'))
+print (parameter_names)
+parameter_values = literal_eval(input('Parameter values?\n'))
+print (parameter_values)
+temperature_K = input('Temperature (K)?\n')
+# TODO: Doesn't actually use temp or stress
+if temperature_K != '':
+    print(temperature_K)
+    test_level_optional_inputs['temperature_K'] = int(temperature_K)
+else:
+    print('No temperature given')
+cell_cauchy_stress_eV_angstrom3 = input('Cauchy stress (literal list of floats, Voigt order xx,yy,zz,yz,xz,xy, eV/A^3)?\n')
+if cell_cauchy_stress_eV_angstrom3 != '':
+    print(cell_cauchy_stress_eV_angstrom3)
+    test_level_optional_inputs['cell_cauchy_stress_eV_angstrom3'] = literal_eval(cell_cauchy_stress_eV_angstrom3)
+else:
+    print('No stress given')
+runtime_args = literal_eval(input('Runtime arguments (literal dictonary)?\n'))
+test = TestDriver(model_name)
+test(
+    stoichiometric_species = stoichiometric_species,
+    prototype_labels = prototype_labels,
+    parameter_names = parameter_names,
+    parameter_values_angstrom = parameter_values,
+    **runtime_args
+    )
+test.write_property_instances_to_file()
