@@ -5,10 +5,10 @@ query({"project": ["shortcode"],
                    "$regex": "EquilibriumCrystalStructure_"+prototype_label+"_"+"".join(stoichiometric_species)+"__TE_"}},
                    "limit": 1, "database": "obj"})}},
 {% for element in stoichiometric_species %}
-query({"project": ["shortcode"],
+{{query({"project": ["shortcode"],
        "query": {"kimcode":
                   {"$options": "",
                    "$regex": "referenceelementalgroundstate_"+{{element}}+"__TE_"}},
-                   "limit": 1, "database": "obj"})}},
+                   "limit": 1, "database": "obj"})}}
 {% endfor %}
                    ]
