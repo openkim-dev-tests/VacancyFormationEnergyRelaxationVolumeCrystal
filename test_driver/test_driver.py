@@ -1,7 +1,9 @@
-from kim_tools import KIMTestDriver, CrystalGenomeTestDriver, aflow_util, KIMTestDriverError
+from kim_tools import KIMTestDriver,SingleCrystalTestDriver, aflow_util, KIMTestDriverError
+from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
 from ase import Atoms
 from typing import Any, Optional, List, Union, Dict, IO
 import numpy as np
+from ase.geometry.cell import cellpar_to_cell
 
 from ase.build import bulk
 from ase.optimize import FIRE
@@ -17,14 +19,34 @@ import json
 import math
 from collections import OrderedDict
 
-from helper_functions import V
 import string
+
+from collections import OrderedDict
+KEY_SOURCE_VALUE = 'source-value'
+KEY_SOURCE_UNIT = 'source-unit'
+KEY_SOURCE_UNCERT = 'source-std-uncert-value'
+
+def V(value, unit = '', uncert = ''):
+    # Generate OrderedDict for JSON Dump
+    res = OrderedDict([
+        (KEY_SOURCE_VALUE, value),
+    ])
+    if unit != '':
+        res.update(OrderedDict([
+            (KEY_SOURCE_UNIT, unit),
+        ]))
+    if uncert != '':
+        res.update(OrderedDict([
+            (KEY_SOURCE_UNCERT, uncert)
+        ]))
+    return res
+
 
 
 # TODO: Check how many of these I actually  use
 # Parameters for Production
 FIRE_LOG = 'fire.log'
-FIRE_MAX_STEPS = 50
+FIRE_MAX_STEPS = 1000
 FIRE_UNCERT_STEPS = 20
 FIRE_TOL = 1e-3 # absolute
 FMIN_FTOL = 1e-6 # relative
@@ -90,27 +112,43 @@ WYCKOFF_SITES = {
     'hcp': [[2.0 / 3.0, 1.0 / 3.0, 0.25]],
 }
 
+# TODO: Look at rounding of cell parameters which impacts relaxation volume
+class TestDriver(SingleCrystalTestDriver):
 
-class TestDriver(CrystalGenomeTestDriver):
-
-    def _calculate(self, **kwargs):
-        if len(np.unique(self.atoms.get_atomic_numbers()))>1:
-            self.unary = False
-        else:
-            self.unary = True
+    def _calculate(self, reservoir_info=None, **kwargs):
+        self.reservoir_info = reservoir_info 
+        self.atoms = self._get_atoms()
+        print (self.atoms)
         # symmetry stuff    
-        sg_kinds = self.atoms.arrays['spacegroup_kinds']
-        self.chemical_symbols = self.atoms.get_chemical_symbols() 
-        sorted_symbols = sorted(np.unique(self.chemical_symbols))
-        self.letters = {}
-        for it, i in enumerate(sorted_symbols):
-            self.letters[str(i)] = string.ascii_lowercase[it]
-        self.atoms.info['basis'] = get_basis(self.atoms,self.atoms.info['spacegroup'])
-        self.atoms.info['sg_symbol'] = self.atoms.info['spacegroup'].symbol.replace(' ','')
-        _, self.unique_idxs, self.multiplicities = np.unique(sg_kinds,return_index=True, return_counts=True)
+        #print (self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value'])
+        prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
+        self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
+        # symmetry stuff    
+        #sg_kinds = self.atoms.arrays['spacegroup_kinds']
+        #self.chemical_symbols = self.atoms.get_chemical_symbols() 
+        #sorted_symbols = sorted(np.unique(self.chemical_symbols))
+        #self.letters = {}
+        #for it, i in enumerate(sorted_symbols):
+        #    self.letters[str(i)] = string.ascii_lowercase[it]
+        #self.atoms.info['basis'] = get_basis(self.atoms,self.atoms.info['spacegroup'])
+        #self.atoms.info['sg_symbol'] = self.atoms.info['spacegroup'].symbol.replace(' ','')
+        #_, self.unique_idxs, self.multiplicities = np.unique(sg_kinds,return_index=True, return_counts=True)
 
-        for i in range(len(self.unique_idxs)):
-            res = self.getResults(i)
+
+        if DYNAMIC_CELL_SIZE == True:
+            numAtoms = self.atoms.get_number_of_atoms()
+            factor = math.pow(8 / numAtoms, 0.333)
+            global CELL_SIZE_MIN, CELL_SIZE_MAX
+            CELL_SIZE_MIN = int(math.ceil(factor * CELL_SIZE_MIN))
+            CELL_SIZE_MAX = CELL_SIZE_MIN + 2
+            print('CELL_SIZE_MIN:', CELL_SIZE_MIN)
+            print('CELL_SIZE_MAX:', CELL_SIZE_MAX)
+            print('Smallest System Size:', numAtoms * CELL_SIZE_MIN**3)
+            print('Largest System Size:', numAtoms * CELL_SIZE_MAX**3)
+
+        for wkof in self.equivalent_atoms:
+            idx = wkof['indices'][0] 
+            res = self.getResults(idx)
             for k,r in res.items():
             # TODO: set up property instances
                 self._add_property_instance_and_common_crystal_genome_keys(k,
@@ -134,11 +172,12 @@ class TestDriver(CrystalGenomeTestDriver):
 
     def _cellVector2Cell(self, cellVector):
         # Reconstruct cell From cellVector
-        cell = [
-            [cellVector[0], 0, 0],
-            [cellVector[1], cellVector[2], 0],
-            [cellVector[3], cellVector[4], cellVector[5]]
-        ]
+        #cell = [
+        #    [cellVector[0], cellVector[1], cellVector[2]],
+        #    [cellVector[3], cellVector[4], cellVector[5]],
+        #    [cellVector[6], cellVector[7], cellVector[8]]
+        #]
+        cell = cellpar_to_cell(cellVector)
         return cell
 
     def _cell2CellVector(self, cell):
@@ -146,32 +185,30 @@ class TestDriver(CrystalGenomeTestDriver):
         # For reducing degree of freedom during relaxation
         cellVector = [
             cell[0, 0],
+            cell[0, 1],
+            cell[0, 2],
             cell[1, 0],
             cell[1, 1],
+            cell[1, 2],
             cell[2, 0],
             cell[2, 1],
             cell[2, 2],
         ]
         return cellVector
-    # TODO: remove numAtoms and replace with chemical potential
     # Evf = Ev - E0 + mu, where mu is chemical potential of removed element
-    # query OpenKIM for lowest energy/atom structure to find mu
-    # TODO: Investigate if leaving unary system  as is, i.e, Evf = Ev - (N-1)/N*E0
     def _getVFE(self, cellVector, atoms, enAtoms, numAtoms):
         newCell = self._cellVector2Cell(cellVector)
         atoms.set_cell(newCell, scale_atoms = True)
         enAtomsWithVacancy = atoms.get_potential_energy()
-        if not self.unary:
-            enVacancy = enAtomsWithVacancy - enAtoms + self.chemical_potential
-        else:
-            enVacancy = enAtomsWithVacancy - enAtoms * (numAtoms - 1) / numAtoms
+        enVacancy = enAtomsWithVacancy - enAtoms + self.chemical_potential
         return enVacancy
 
     def _getResultsForSize(self, size, idx):
         # Setup Environment
         unrelaxedCell = self.atoms.get_cell() * size
-        unrelaxedCellVector = self._cell2CellVector(unrelaxedCell)
+        #unrelaxedCellVector = self._cell2CellVector(unrelaxedCell)
         atoms = self._createSupercell(size)
+        unrelaxedCellVector = atoms.get_cell_lengths_and_angles() 
         numAtoms = atoms.get_number_of_atoms()
         enAtoms = atoms.get_potential_energy()
         unrelaxedCellEnergy = enAtoms
@@ -182,18 +219,15 @@ class TestDriver(CrystalGenomeTestDriver):
         print('Unrelaxed Cell Energy:\n', unrelaxedCellEnergy)
 
         # Create Vacancy 
-        print (atoms[self.unique_idxs[idx]])
-        del atoms[self.unique_idxs[idx]]
+        del atoms[idx]
         enAtomsWithVacancy = atoms.get_potential_energy()
 
         print('Energy of Unrelaxed Cell With Vacancy:\n', enAtomsWithVacancy)
-        if not self.unary:
-            enVacancyUnrelaxed = enAtomsWithVacancy - enAtoms + self.chemical_potential
-        else:
-            enVacancyUnrelaxed = enAtomsWithVacancy - enAtoms * (numAtoms - 1) / numAtoms
+        enVacancyUnrelaxed = enAtomsWithVacancy - enAtoms + self.chemical_potential
 
         # Self Consistent Relaxation
         enVacancy = 0
+
         relaxedCellVector = unrelaxedCellVector
         loop = 0
         while 1:
@@ -336,26 +370,31 @@ class TestDriver(CrystalGenomeTestDriver):
 
         #TODO: Populate reservoir information if necessary
         #grab chemical potential
-        if not self.unary:
-            query_result = raw_query(
-                query={
-                    "meta.type": "tr",
-                    # TODO: change below query
-                    "property-id": "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-                    "meta.subject.extended-id": self.model_name,
-                    "stoichiometric-species.source-value":{
-                        "$size": 1,
-                        "$all": [self.atoms[self.unique_idxs][idx].symbol]
-                    },
+        # TODO: don't query, as info will be piped into test, keep below for now to get working
+        print (idx,self.atoms[idx].symbol)
+        '''
+        query_result = raw_query(
+            query={
+                "meta.type": "tr",
+                # TODO: change below query, query for different structures based on atom type of removed atom, grab structure
+                "property-id": "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+                "meta.subject.extended-id": self.kim_model_name,
+                "stoichiometric-species.source-value":{
+                    "$size": 1,
+                    "$all": [self.atoms[idx].symbol]
                 },
-                fields={
-                    "binding-potential-energy-per-atom": 1,
-                    "short-name.source-value":1,
-                    },
-                database="data", limit=0, sort=[["binding-potential-energy-per-atom", 1]])
-            self.chemical_potential = query_result[0]["binding-potential-energy-per-atom"]["source-value"] 
-            print (query_result[0])
-            print ('Chemical Potential', self.chemical_potential)
+            },
+            #fields={
+            #    "binding-potential-energy-per-atom": 1,
+            #    "short-name.source-value":1,
+                # TODO: grab a few more fields which may be useful
+            #    },
+            database="data", limit=0, sort=[["binding-potential-energy-per-atom", 1]])
+        query_result[0].pop('meta')
+        self.reservoir_info  = query_result[0]
+        '''
+        self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] 
+        print ('Chemical Potential', self.chemical_potential)
 
 
         unitBulk = self.atoms
@@ -491,66 +530,85 @@ class TestDriver(CrystalGenomeTestDriver):
             ('host-removed-atom', V(idx)),
         ])
 
-        # TODO: Check what this is
+        # TODO: Check what this is-Change
         reservoirInfo = OrderedDict([
             ('reservoir-cohesive-potential-energy', V(-unitBulk.get_potential_energy()/unitBulk.get_global_number_of_atoms(), UNIT_ENERGY)),
         ])
         
-        if self.short_name is not None:
-            hostInfo.update({'host-short-name': V(self.short_name)})
+        #if self.short_name is not None:
+        #    hostInfo.update({'host-short-name': V(self.short_name)})
 
 
-        hostInfo.update(OrderedDict([
-            ('host-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
-            ('host-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
-            ('host-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
-            ('host-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
-            ('host-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
-            ('host-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
-            ('host-space-group', V(self.atoms.info['sg_symbol'])),
-            ('host-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
-            ('host-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
-            ('host-wyckoff-species', V([self.chemical_symbols[idx]])),
-        ]))
+        # TODO: need to do something like self.unique_idxs[idx] for some of these
+        #hostInfo.update(OrderedDict([
+        #    ('host-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
+        #    ('host-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
+        #    ('host-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
+        #    ('host-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
+        #    ('host-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
+        #    ('host-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
+        #    ('host-space-group', V(self.atoms.info['sg_symbol'])),
+        #    ('host-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
+        #    ('host-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
+        #    ('host-wyckoff-species', V([self.chemical_symbols[self.unique_idxs[idx]]])),
+        #]))
 
-        # TODO: Probably remove reservoir info related to wyckoff stuff. We assume chemical potential is E/n. 
-        if self.unary:
-            if self.short_name is not None:
-                reservoirInfo.update(OrderedDict([
-                    ('reservoir-short-name', V(self.short_name))
-                ]))
-            reservoirInfo.update(OrderedDict([
-                ('reservoir-cauchy-stress', V([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], UNIT_PRESSURE)),
-                ('reservoir-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
-                ('reservoir-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
-                ('reservoir-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
-                ('reservoir-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
-                ('reservoir-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
-                ('reservoir-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
-                ('reservoir-space-group', V(self.atoms.info['sg_symbol'])),
-                #('reservoir-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
-                #('reservoir-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
-                #('reservoir-wyckoff-species', V([self.chemical_symbols[idx]])),
-            ]))
-        else: 
-            # TODO: Put in proper reservoir info
-            pass
-        unrelaxedformationEnergyResult.update(hostInfo)
-        unrelaxedformationEnergyResult.update(reservoirInfo)
-        formationEnergyResult.update(hostInfo)
-        formationEnergyResult.update(reservoirInfo)
-        relaxationVolumeResult.update(hostInfo)
+        # just replicate host into reservoir for now but should change to reference stucture from which chemical potential is pulled
+        #if 1:
+        #    if self.short_name is not None:
+        #        reservoirInfo.update(OrderedDict([
+        #            ('reservoir-short-name', V(self.short_name))
+        #        ]))
+            # TODO: need to do something like self.unique_idxs[idx] for some of these
+        #    reservoirInfo.update(OrderedDict([
+        #        ('reservoir-cauchy-stress', V([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], UNIT_PRESSURE)),
+        #        ('reservoir-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
+        #        ('reservoir-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
+        #        ('reservoir-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
+        #        ('reservoir-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
+        #        ('reservoir-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
+        #        ('reservoir-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
+        #        ('reservoir-space-group', V(self.atoms.info['sg_symbol'])),
+        #        ('reservoir-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
+        #        ('reservoir-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
+        #        ('reservoir-wyckoff-species', V([self.chemical_symbols[self.unique_idxs[idx]]])),
+        #    ]))
+        #unrelaxedformationEnergyResult.update(hostInfo)
+        #unrelaxedformationEnergyResult.update(reservoirInfo)
+        #formationEnergyResult.update(hostInfo)
+        #formationEnergyResult.update(reservoirInfo)
+        #relaxationVolumeResult.update(hostInfo)
 
-        results = {"monovacancy-neutral-unrelaxed-formation-potential-energy-crystal-npt": unrelaxedformationEnergyResult, 
-                   "monovacancy-neutral-relaxed-formation-potential-energy-crystal-npt": formationEnergyResult, 
-                   "monovacancy-neutral-relaxation-volume-crystal-npt": relaxationVolumeResult}
+        results = {"new-monovacancy-neutral-unrelaxed-formation-potential-energy-crystal-npt": unrelaxedformationEnergyResult, 
+                   "new-monovacancy-neutral-relaxed-formation-potential-energy-crystal-npt": formationEnergyResult, 
+                   "new-monovacancy-neutral-relaxation-volume-crystal-npt": relaxationVolumeResult}
         return results
 
 if __name__ == "__main__":
     from ase.build import bulk
-    test = TestDriver('EAM_Dynamo_ZhouWadleyJohnson_2001_Al__MO_049243498555_000')
-    atoms = bulk('Al','fcc',a=4.04)
-    #test(atoms)
-    d = {"stoichiometric_species": ["Al"], "prototype_label": "A_cF4_225_a", "parameter_values_angstrom": [4.081654928624631], "rebuild_atoms": False}
-    test(**d) 
-    test.write_property_instances_to_file()
+    from kim_tools import query_crystal_structures
+    
+    kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
+    list_of_queried_structures = query_crystal_structures(
+        kim_model_name=kim_model_name,
+        stoichiometric_species=["Al"],
+        prototype_label="A_cF4_225_a",
+    )
+    for i in list_of_queried_structures:
+        test = TestDriver(kim_model_name)
+        test(i) 
+        test.write_property_instances_to_file()
+    '''
+
+    kim_model_name = 'EDIP_LAMMPS_JiangMorganSzlufarska_2012_SiC__MO_667792548433_000'
+    list_of_queried_structures = query_crystal_structures(
+        kim_model_name=kim_model_name,
+        stoichiometric_species=["C", "Si"],
+        prototype_label="A2B_cP12_205_c_a",
+    )
+    test = TestDriver(kim_model_name)
+    for i in list_of_queried_structures:
+        test = TestDriver(kim_model_name)
+        test(i) 
+        test.write_property_instances_to_file()
+   ''' 
