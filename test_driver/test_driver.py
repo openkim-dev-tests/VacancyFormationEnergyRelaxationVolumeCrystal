@@ -481,7 +481,7 @@ if __name__ == "__main__":
     from ase.build import bulk
     from kim_tools import query_crystal_structures
     from kim_query import raw_query
-    # TODO: take in reservoir info
+    '''
     kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
@@ -502,16 +502,39 @@ if __name__ == "__main__":
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
         test(i, reservoir_info = {'Al': reservoir_info}) 
-   
     '''
-    kim_model_name = 'EDIP_LAMMPS_JiangMorganSzlufarska_2012_SiC__MO_667792548433_000'
+    kim_model_name = 'Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
-        stoichiometric_species=["C", "Si"],
-        prototype_label="A2B_cP12_205_c_a",
+        stoichiometric_species=["Ce", 'O'],
+        prototype_label="AB2_cF12_225_a_c",
     )
-    test = TestDriver(kim_model_name)
+
+    reservoir_dict = {}
+
+    reservoir_info = raw_query(query = {
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+            "meta.subject.extended-id": kim_model_name,
+            "stoichiometric-species.source-value": ["Ce"],
+            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
+        },
+        database="data", limit=0
+    )
+    reservoir_dict['Ce'] =  reservoir_info
+
+    reservoir_info = raw_query(query = {
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+            "meta.subject.extended-id": kim_model_name,
+            "stoichiometric-species.source-value": ["O"],
+            "prototype-label.source-value": "A_mC16_12_2ij", # ground state prototype
+        },
+        database="data", limit=0
+    )
+    reservoir_dict['O'] =  reservoir_info
+
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
-        test(i) 
-     '''
+        test(i, reservoir_info = reservoir_dict)
+
