@@ -1,25 +1,12 @@
-from kim_tools import KIMTestDriver,SingleCrystalTestDriver, aflow_util, KIMTestDriverError
+from kim_tools import SingleCrystalTestDriver
 from kim_tools.aflow_util.core import get_atom_indices_for_each_wyckoff_orb
-from ase import Atoms
-from typing import Any, Optional, List, Union, Dict, IO
 import numpy as np
 from ase.geometry.cell import cellpar_to_cell
-
-from ase.build import bulk
 from ase.optimize import FIRE
-from ase.spacegroup import get_basis
-
-from kim_query import raw_query
-
-import os
 from scipy.optimize import fmin
 import sys
-import re
-import json
 import math
 from collections import OrderedDict
-
-import string
 
 from collections import OrderedDict
 KEY_SOURCE_VALUE = 'source-value'
@@ -41,11 +28,7 @@ def V(value, unit = '', uncert = ''):
         ]))
     return res
 
-
-
-# TODO: Check how many of these I actually  use
 # Parameters for Production
-FIRE_LOG = 'fire.log'
 FIRE_MAX_STEPS = 1000
 FIRE_UNCERT_STEPS = 20
 FIRE_TOL = 1e-3 # absolute
@@ -59,12 +42,6 @@ COLLAPSE_CRITERIA_VOLUME = 0.1
 COLLAPSE_CRITERIA_ENERGY = 0.1
 DYNAMIC_CELL_SIZE = True # Increase Cell Size According to lattice structure
 EPS = 1e-3
-
-# Parameters for Debugging
-#FIRE_MAX_STEPS = 200
-#FIRE_TOL = 1e-3 # absolute
-#FMIN_FTOL = 1e-3 # relative
-#FMIN_XTOL = 1e-5 # relative
 
 # Extrapolation Parameters
 FITS_CNT = [2, 3, 3, 3, 3] # Number of data points used for each fitting
@@ -90,27 +67,6 @@ UNIT_LENGTH = 'angstrom'
 UNIT_ANGLE = 'degree'
 UNIT_PRESSURE = 'GPa'
 UNIT_VOLUME = UNIT_LENGTH + '^3'
-SPACE_GROUPS = {
-    'fcc': 'Fm-3m',
-    'bcc': 'Im-3m',
-    'sc': 'Pm-3m',
-    'diamond': 'Fd-3m',
-    'hcp': 'P63/mmc',
-}
-WYCKOFF_CODES = {
-    'fcc': ['4a'],
-    'bcc': ['2a'],
-    'sc': ['1a'],
-    'diamond': ['8a'],
-    'hcp': ['2d'],
-}
-WYCKOFF_SITES = {
-    'fcc': [[0.0, 0.0, 0.0]],
-    'bcc': [[0.0, 0.0, 0.0]],
-    'sc': [[0.0, 0.0, 0.0]],
-    'diamond': [[0.0, 0.0, 0.0]],
-    'hcp': [[2.0 / 3.0, 1.0 / 3.0, 0.25]],
-}
 
 # TODO: Look at rounding of cell parameters which impacts relaxation volume
 class TestDriver(SingleCrystalTestDriver):
@@ -118,22 +74,8 @@ class TestDriver(SingleCrystalTestDriver):
     def _calculate(self, reservoir_info=None, **kwargs):
         self.reservoir_info = reservoir_info 
         self.atoms = self._get_atoms()
-        print (self.atoms)
-        # symmetry stuff    
-        #print (self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value'])
         prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
         self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
-        # symmetry stuff    
-        #sg_kinds = self.atoms.arrays['spacegroup_kinds']
-        #self.chemical_symbols = self.atoms.get_chemical_symbols() 
-        #sorted_symbols = sorted(np.unique(self.chemical_symbols))
-        #self.letters = {}
-        #for it, i in enumerate(sorted_symbols):
-        #    self.letters[str(i)] = string.ascii_lowercase[it]
-        #self.atoms.info['basis'] = get_basis(self.atoms,self.atoms.info['spacegroup'])
-        #self.atoms.info['sg_symbol'] = self.atoms.info['spacegroup'].symbol.replace(' ','')
-        #_, self.unique_idxs, self.multiplicities = np.unique(sg_kinds,return_index=True, return_counts=True)
-
 
         if DYNAMIC_CELL_SIZE == True:
             numAtoms = self.atoms.get_number_of_atoms()
@@ -151,6 +93,8 @@ class TestDriver(SingleCrystalTestDriver):
             res = self.getResults(idx)
             for k,r in res.items():
             # TODO: set up property instances
+                pass
+                '''
                 self._add_property_instance_and_common_crystal_genome_keys(k,
                                                                    write_stress=False, write_temp=False)
                 for k2,v in r.items():
@@ -161,7 +105,7 @@ class TestDriver(SingleCrystalTestDriver):
                             self._add_key_to_current_property_instance(k2, v['source-value'])
                     else:
                         self._add_key_to_current_property_instance(k2, v)
-
+                '''
 
     # First 3 functions could be moved into utility 
     def _createSupercell(self, size):
@@ -171,12 +115,6 @@ class TestDriver(SingleCrystalTestDriver):
         return atoms
 
     def _cellVector2Cell(self, cellVector):
-        # Reconstruct cell From cellVector
-        #cell = [
-        #    [cellVector[0], cellVector[1], cellVector[2]],
-        #    [cellVector[3], cellVector[4], cellVector[5]],
-        #    [cellVector[6], cellVector[7], cellVector[8]]
-        #]
         cell = cellpar_to_cell(cellVector)
         return cell
 
@@ -236,7 +174,6 @@ class TestDriver(SingleCrystalTestDriver):
             print('Loop:', loop)
             print('Position Relaxation...')
             dyn = FIRE(atoms)
-            # dyn = FIRE(atoms, logfile = FIRE_LOG)
             dyn.run(fmax = FIRE_TOL, steps = FIRE_MAX_STEPS)
             numSteps = dyn.get_number_of_steps()
             if numSteps >= FIRE_MAX_STEPS:
@@ -372,33 +309,11 @@ class TestDriver(SingleCrystalTestDriver):
         #grab chemical potential
         # TODO: don't query, as info will be piped into test, keep below for now to get working
         print (idx,self.atoms[idx].symbol)
-        '''
-        query_result = raw_query(
-            query={
-                "meta.type": "tr",
-                # TODO: change below query, query for different structures based on atom type of removed atom, grab structure
-                "property-id": "tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-                "meta.subject.extended-id": self.kim_model_name,
-                "stoichiometric-species.source-value":{
-                    "$size": 1,
-                    "$all": [self.atoms[idx].symbol]
-                },
-            },
-            #fields={
-            #    "binding-potential-energy-per-atom": 1,
-            #    "short-name.source-value":1,
-                # TODO: grab a few more fields which may be useful
-            #    },
-            database="data", limit=0, sort=[["binding-potential-energy-per-atom", 1]])
-        query_result[0].pop('meta')
-        self.reservoir_info  = query_result[0]
-        '''
         self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] 
         print ('Chemical Potential', self.chemical_potential)
 
 
         unitBulk = self.atoms
-        unitCell = unitBulk.get_cell()
 
         # Calculate VFE and VRV for Each Size
         sizes = []
@@ -418,28 +333,6 @@ class TestDriver(SingleCrystalTestDriver):
         print('Unrelaxed Formation Energy By Size:\n', unrelaxedformationEnergyBySize)
         print('Formation Energy By Size:\n', formationEnergyBySize)
         print('Relaxation Volume By Size:\n', relaxationVolumeBySize)
-
-        # Eric->Keeping below original comments in case they are useful in the future
-        # Data for skipping computation when debugging extrapolation and output
-        # sizes = [3, 4, 5, 6, 7, 8, 9]
-        # formationEnergyBySize = [
-                # 0.6721479768766585 ,
-                # 0.67372899358906579,
-                # 0.67440913973746319,
-                # 0.6747228089247983 ,
-                # 0.67488432759455463,
-                # 0.6749755557248136 ,
-                # 0.67503091578691965,
-        # ]
-        # relaxationVolumeBySize = [
-                # 8.2664887840680876,
-                # 8.2145358736270282,
-                # 8.2008345712674782,
-                # 8.1943833508903481,
-                # 8.1916426682910242,
-                # 8.1898981954873307,
-                # 8.1889297673697001,
-        # ]
 
         # Extrapolate for VFE and VRV of Infinite Size
         print('\n[Extrapolation]')
@@ -587,19 +480,30 @@ class TestDriver(SingleCrystalTestDriver):
 if __name__ == "__main__":
     from ase.build import bulk
     from kim_tools import query_crystal_structures
-    
+    from kim_query import raw_query
+    # TODO: take in reservoir info
     kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
         stoichiometric_species=["Al"],
         prototype_label="A_cF4_225_a",
     )
+
+    reservoir_info = raw_query(query = {
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+            "meta.subject.extended-id": kim_model_name,
+            "stoichiometric-species.source-value": ["Al"],
+            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
+        },
+        database="data", limit=0
+    )
+
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
-        test(i) 
-        test.write_property_instances_to_file()
+        test(i, reservoir_info = {'Al': reservoir_info}) 
+   
     '''
-
     kim_model_name = 'EDIP_LAMMPS_JiangMorganSzlufarska_2012_SiC__MO_667792548433_000'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
@@ -610,5 +514,4 @@ if __name__ == "__main__":
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
         test(i) 
-        test.write_property_instances_to_file()
-   ''' 
+     '''
