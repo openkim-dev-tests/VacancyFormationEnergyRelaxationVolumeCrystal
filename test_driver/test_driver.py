@@ -76,6 +76,7 @@ class TestDriver(SingleCrystalTestDriver):
         self.atoms = self._get_atoms()
         prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
         self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
+        print (self.equivalent_atoms)
 
         if DYNAMIC_CELL_SIZE == True:
             numAtoms = self.atoms.get_number_of_atoms()
@@ -88,24 +89,22 @@ class TestDriver(SingleCrystalTestDriver):
             print('Smallest System Size:', numAtoms * CELL_SIZE_MIN**3)
             print('Largest System Size:', numAtoms * CELL_SIZE_MAX**3)
 
+        results = []
         for wkof in self.equivalent_atoms:
             idx = wkof['indices'][0] 
-            res = self.getResults(idx)
-            for k,r in res.items():
-            # TODO: set up property instances
-                pass
-                '''
-                self._add_property_instance_and_common_crystal_genome_keys(k,
-                                                                   write_stress=False, write_temp=False)
-                for k2,v in r.items():
-                    if isinstance(v,OrderedDict):
-                        if 'source-unit' in v:
-                            self._add_key_to_current_property_instance(k2, v['source-value'], v['source-unit'])
-                        else:
-                            self._add_key_to_current_property_instance(k2, v['source-value'])
-                    else:
-                        self._add_key_to_current_property_instance(k2, v)
-                '''
+            results.append(self.getResults(idx))
+        organized_props = self.organize_properties(results)
+        for k,v in organized_props.items():
+            print (k,v)
+
+        
+            self._add_property_instance_and_common_crystal_genome_keys(k,
+                                                                   write_stress=True, write_temp=True)
+            for k2,v2 in v.items():
+                if 'source-unit' in v2:
+                    self._add_key_to_current_property_instance(k2, v2['source-value'], v2['source-unit'])
+                else:
+                    self._add_key_to_current_property_instance(k2, v2['source-value'])
 
     # First 3 functions could be moved into utility 
     def _createSupercell(self, size):
@@ -117,22 +116,7 @@ class TestDriver(SingleCrystalTestDriver):
     def _cellVector2Cell(self, cellVector):
         cell = cellpar_to_cell(cellVector)
         return cell
-
-    def _cell2CellVector(self, cell):
-        # Extract cellVector From cell
-        # For reducing degree of freedom during relaxation
-        cellVector = [
-            cell[0, 0],
-            cell[0, 1],
-            cell[0, 2],
-            cell[1, 0],
-            cell[1, 1],
-            cell[1, 2],
-            cell[2, 0],
-            cell[2, 1],
-            cell[2, 2],
-        ]
-        return cellVector
+    
     # Evf = Ev - E0 + mu, where mu is chemical potential of removed element
     def _getVFE(self, cellVector, atoms, enAtoms, numAtoms):
         newCell = self._cellVector2Cell(cellVector)
@@ -144,7 +128,6 @@ class TestDriver(SingleCrystalTestDriver):
     def _getResultsForSize(self, size, idx):
         # Setup Environment
         unrelaxedCell = self.atoms.get_cell() * size
-        #unrelaxedCellVector = self._cell2CellVector(unrelaxedCell)
         atoms = self._createSupercell(size)
         unrelaxedCellVector = atoms.get_cell_lengths_and_angles() 
         numAtoms = atoms.get_number_of_atoms()
@@ -256,22 +239,6 @@ class TestDriver(SingleCrystalTestDriver):
 
         return enVacancyUnrelaxed, relaxedCellVector, enVacancy, relaxationVolume
 
-    # Possibly move 2 below functions to utility
-    def _getUnitVector(self, vec):
-        return vec / np.linalg.norm(vec)
-
-    def _getAngle(self, vec1, vec2):
-        # Get acute angle between two vectors in degrees (always between 0 - 90)
-        vec1Unit = self._getUnitVector(vec1)
-        vec2Unit = self._getUnitVector(vec2)
-        angle = np.arccos(np.dot(vec1Unit, vec2Unit))
-        if np.isnan(angle):
-            return 0.0
-        angle = angle * 180.0 / np.pi
-        # if angle < 0:
-            # return 180.0 + angle
-        return angle
-
     def _getFit(self, xdata, ydata, orders):
         # Polynomial Fitting with Specific Orders
         A = []
@@ -304,9 +271,7 @@ class TestDriver(SingleCrystalTestDriver):
         return sourceValue, sourceUncert
 
     def getResults(self, idx):
-
-        #TODO: Populate reservoir information if necessary
-        #grab chemical potential
+        # grab chemical potential
         # TODO: don't query, as info will be piped into test, keep below for now to get working
         print (idx,self.atoms[idx].symbol)
         self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] 
@@ -417,71 +382,64 @@ class TestDriver(SingleCrystalTestDriver):
         relaxationVolumeResult = OrderedDict([
             ('relaxation-volume', V(relaxationVolume, UNIT_VOLUME, relaxationVolumeUncert)),
         ])
-        # hack to keep same ordering 
-        hostInfo = OrderedDict([
-            ('host-cauchy-stress', V([0, 0, 0, 0, 0, 0], UNIT_PRESSURE)),
-            ('host-removed-atom', V(idx)),
-        ])
 
-        # TODO: Check what this is-Change
-        reservoirInfo = OrderedDict([
-            ('reservoir-cohesive-potential-energy', V(-unitBulk.get_potential_energy()/unitBulk.get_global_number_of_atoms(), UNIT_ENERGY)),
-        ])
-        
-        #if self.short_name is not None:
-        #    hostInfo.update({'host-short-name': V(self.short_name)})
-
-
-        # TODO: need to do something like self.unique_idxs[idx] for some of these
-        #hostInfo.update(OrderedDict([
-        #    ('host-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
-        #    ('host-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
-        #    ('host-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
-        #    ('host-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
-        #    ('host-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
-        #    ('host-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
-        #    ('host-space-group', V(self.atoms.info['sg_symbol'])),
-        #    ('host-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
-        #    ('host-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
-        #    ('host-wyckoff-species', V([self.chemical_symbols[self.unique_idxs[idx]]])),
-        #]))
-
-        # just replicate host into reservoir for now but should change to reference stucture from which chemical potential is pulled
-        #if 1:
-        #    if self.short_name is not None:
-        #        reservoirInfo.update(OrderedDict([
-        #            ('reservoir-short-name', V(self.short_name))
-        #        ]))
-            # TODO: need to do something like self.unique_idxs[idx] for some of these
-        #    reservoirInfo.update(OrderedDict([
-        #        ('reservoir-cauchy-stress', V([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], UNIT_PRESSURE)),
-        #        ('reservoir-a', V(np.linalg.norm(unitCell[0]), UNIT_LENGTH)),
-        #        ('reservoir-b', V(np.linalg.norm(unitCell[1]), UNIT_LENGTH)),
-        #        ('reservoir-c', V(np.linalg.norm(unitCell[2]), UNIT_LENGTH)),
-        #        ('reservoir-alpha', V(self._getAngle(unitCell[1], unitCell[2]), UNIT_ANGLE)),
-        #        ('reservoir-beta', V(self._getAngle(unitCell[2], unitCell[0]), UNIT_ANGLE)),
-        #        ('reservoir-gamma', V(self._getAngle(unitCell[0], unitCell[1]), UNIT_ANGLE)),
-        #        ('reservoir-space-group', V(self.atoms.info['sg_symbol'])),
-        #        ('reservoir-wyckoff-multiplicity-and-letter', V([str(self.multiplicities[idx])+self.letters[self.chemical_symbols[idx]]])),
-        #        ('reservoir-wyckoff-coordinates', V([self.atoms.info['basis'][idx]])),
-        #        ('reservoir-wyckoff-species', V([self.chemical_symbols[self.unique_idxs[idx]]])),
-        #    ]))
-        #unrelaxedformationEnergyResult.update(hostInfo)
-        #unrelaxedformationEnergyResult.update(reservoirInfo)
-        #formationEnergyResult.update(hostInfo)
-        #formationEnergyResult.update(reservoirInfo)
-        #relaxationVolumeResult.update(hostInfo)
-
-        results = {"new-monovacancy-neutral-unrelaxed-formation-potential-energy-crystal-npt": unrelaxedformationEnergyResult, 
-                   "new-monovacancy-neutral-relaxed-formation-potential-energy-crystal-npt": formationEnergyResult, 
-                   "new-monovacancy-neutral-relaxation-volume-crystal-npt": relaxationVolumeResult}
+        results = {"monovacancy-unrelaxed-formation-potential-energy-crystal-npt": unrelaxedformationEnergyResult, 
+                   "monovacancy-relaxed-formation-potential-energy-crystal-npt": formationEnergyResult, 
+                   "monovacancy-relaxation-volume-crystal-npt": relaxationVolumeResult}
         return results
+    
+    def organize_properties(self, results):
+        organized_props = {}
+        print ('len results',len(results))
+        for r in results:
+            for k,v in r.items():
+                if k not in organized_props:
+                    organized_props[k] = {}
+                for k2,v2 in v.items():
+                    if k2 not in organized_props[k]:
+                        organized_props[k][k2] = {}
+                        organized_props[k][k2]['source-value'] = [v2['source-value']]
+                    else:
+                        organized_props[k][k2]['source-value'].append(v2['source-value'])
+                organized_props[k][k2]['source-unit'] = v2['source-unit'] # must all be same
+                # TODO: look at uncertainty later
+       
+        # get reservoir and host info
+        res_info = {}
+        host_info = {}
+        for idx,i in enumerate(self.equivalent_atoms):
+            ele = self.atoms.get_chemical_symbols()[i['indices'][0]]
+            res_info[ele] = {
+                'chemical_potential': self.reservoir_info[ele][0]["binding-potential-energy-per-atom"]["source-value"],
+                'prototype_label': self.reservoir_info[ele][0]["prototype-label"]["source-value"]
+            }
+            host_info[idx] = {
+                'species': ele,
+                'coord': self.atoms.get_scaled_positions()[i['indices'][0]], # TODO: want fractional?
+                'letter': i['letter']
+            }
+        for k,v in organized_props.items():
+            if k != 'monovacancy-relaxation-volume-crystal-npt': # add reservoir info
+                # TODO: Will need to adjust this based upon input of ground state test
+                organized_props[k].setdefault('reservoir-chemical-potential', {})['source-value'] = [v['chemical_potential'] for k,v in res_info.items()]
+                organized_props[k].setdefault('reservoir-chemical-potential', {})['source-unit'] = UNIT_ENERGY
+                organized_props[k].setdefault('reservoir-prototype-label', {})['source-value'] =   [v['prototype_label'] for k,v in res_info.items()]
+                # set host info
+            organized_props[k].setdefault('vacancy-wyckoff-coordinates', {})['source-value'] = [v['coord'] for k,v in host_info.items()]
+            organized_props[k].setdefault('vacancy-wyckoff-species', {})['source-value'] = [v['species'] for k,v in host_info.items()]
+            organized_props[k].setdefault('vacancy-wyckoff-letter', {})['source-value'] = [v['letter'] for k,v in host_info.items()]
+            organized_props[k].setdefault('host-primitive-cell', {})['source-value'] = self.atoms.get_cell()[:,:]
+            organized_props[k].setdefault('host-primitive-cell', {})['source-unit'] = UNIT_LENGTH
+
+        return organized_props
+
+
 
 if __name__ == "__main__":
     from ase.build import bulk
     from kim_tools import query_crystal_structures
     from kim_query import raw_query
-    '''
+    
     kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
@@ -502,6 +460,44 @@ if __name__ == "__main__":
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
         test(i, reservoir_info = {'Al': reservoir_info}) 
+        test.write_property_instances_to_file()
+    '''
+    kim_model_name = 'MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002'
+    list_of_queried_structures = query_crystal_structures(
+        kim_model_name=kim_model_name,
+        stoichiometric_species=["Al", "Pd"],
+        prototype_label="AB_hR26_148_a2f_b2f",
+    )
+
+    res= {}
+    reservoir_info = raw_query(query = {
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+            "meta.subject.extended-id": kim_model_name,
+            "stoichiometric-species.source-value": ["Al"],
+            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
+        },
+        database="data", limit=0
+    )
+    res['Al'] = reservoir_info
+
+    reservoir_info = raw_query(query = {
+            "meta.type":"tr",
+            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
+            "meta.subject.extended-id": kim_model_name,
+            "stoichiometric-species.source-value": ["Pd"],
+            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
+        },
+        database="data", limit=0
+    )
+    res['Pd'] = reservoir_info
+
+    for i in list_of_queried_structures:
+        test = TestDriver(kim_model_name)
+        test(i, reservoir_info = res)   
+        test.write_property_instances_to_file()
+    '''
+    
     '''
     kim_model_name = 'Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000'
     list_of_queried_structures = query_crystal_structures(
@@ -537,4 +533,4 @@ if __name__ == "__main__":
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
         test(i, reservoir_info = reservoir_dict)
-
+    '''
