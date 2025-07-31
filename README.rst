@@ -5,17 +5,19 @@ SUMMARY
   This test driver calculates the vacancy formation energy and relaxation volume at zero temperature and zero pressure.
   
   It works for all prototypes-generating all symmetry unique vacancies.
-  For single-element systems the reservoir is defined as the system itself, while for multi-element systems the reservoirs are defined to be the lowest energy reference structures obtained from the `reference elemental ground state test <WIP>`_. 
+  Vacancy energies are calculated by considering the vacancy moving to a known reference reservoir crystal structure and including the chemical potential associated with this. 
+  Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`.
+  Chemical potentials are model specific and computed using the ??? Test Driver.
+
   For structures that are not stable upon the creation of a monovacancy, it reports the relaxation result in stdout.
   For structures that are stable, it reports in results.edn, not only the value of vacancy formation energy and relaxation volume, but also the uncertainty range
   
 METHOD
   
-  The calculation consists of two steps:
+  The calculation consists of two steps for each unique Wyckoff site monovacancy:
   
   1. Calculate the vacancy formation energy and relaxation volume corresponding to three different sizes of supercell.
-  The minimum size is 3*3*3 cubic unit cells for diamond structure (27 * 8 = 216 atoms).
-  For other structures the minimum size is determined by the smallest number n, which makes n*n*n conventional unit cells has at least the same number of atoms as the above diamond supercell.
+  The minimum size is determined by the smallest number n, which makes a n*n*n unit cell with at least 216 atoms.
   The other two sizes are the two numbers that follows the minimum size.
   
   The Calculation of each size starts from constructing the periodic supercell, then take out one atom from the supercell.
