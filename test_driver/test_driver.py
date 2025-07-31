@@ -70,10 +70,15 @@ UNIT_VOLUME = UNIT_LENGTH + '^3'
 
 # TODO: Look at rounding of cell parameters which impacts relaxation volume
 class TestDriver(SingleCrystalTestDriver):
-
+    # TODO: if reservoir info is None set chemical potential to 0 and populate reservoir info
     def _calculate(self, reservoir_info=None, **kwargs):
-        self.reservoir_info = reservoir_info 
         self.atoms = self._get_atoms()
+        if reservoir_info is None:
+            ele = set(self.atoms.get_chemical_symbols())
+            reservoir_info = {}
+            for e in ele:
+                reservoir_info[e] = [{"binding-potential-energy-per-atom":{"source-value": 0}, "prototype-label": {"source-value": 'Not provided'}}]
+        self.reservoir_info = reservoir_info 
         prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
         self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
         print (self.equivalent_atoms)
@@ -459,7 +464,7 @@ if __name__ == "__main__":
 
     for i in list_of_queried_structures:
         test = TestDriver(kim_model_name)
-        test(i, reservoir_info = {'Al': reservoir_info}) 
+        test(i)#reservoir_info = {'Al': reservoir_info}) 
         test.write_property_instances_to_file()
     '''
     kim_model_name = 'MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002'
