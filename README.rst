@@ -6,7 +6,7 @@ SUMMARY
   
   It works for all prototypes-generating all symmetry unique vacancies.
   Vacancy energies are calculated by considering the vacancy moving to a known reference reservoir crystal structure and including the chemical potential associated with this. 
-  Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`.
+  Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`_.
   Chemical potentials are model specific and computed using the ??? Test Driver.
 
   For structures that are not stable upon the creation of a monovacancy, it reports the relaxation result in stdout.
