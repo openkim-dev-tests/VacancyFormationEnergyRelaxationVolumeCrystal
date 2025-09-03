@@ -7,8 +7,8 @@ from scipy.optimize import fmin
 import sys
 import math
 from collections import OrderedDict
+import kimvv
 
-from collections import OrderedDict
 KEY_SOURCE_VALUE = 'source-value'
 KEY_SOURCE_UNIT = 'source-unit'
 KEY_SOURCE_UNCERT = 'source-std-uncert-value'
@@ -81,7 +81,6 @@ class TestDriver(SingleCrystalTestDriver):
         self.reservoir_info = reservoir_info 
         prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
         self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
-        print (self.equivalent_atoms)
 
         if DYNAMIC_CELL_SIZE == True:
             numAtoms = self.atoms.get_number_of_atoms()
@@ -278,8 +277,8 @@ class TestDriver(SingleCrystalTestDriver):
     def getResults(self, idx):
         # grab chemical potential
         # TODO: don't query, as info will be piped into test, keep below for now to get working
-        print (idx,self.atoms[idx].symbol)
-        self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] 
+        # add back isolated atom energy
+        self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] + self.get_isolated_energy_per_atom(self.atoms[idx].symbol) 
         print ('Chemical Potential', self.chemical_potential)
 
 
@@ -395,7 +394,6 @@ class TestDriver(SingleCrystalTestDriver):
     
     def organize_properties(self, results):
         organized_props = {}
-        print ('len results',len(results))
         for r in results:
             for k,v in r.items():
                 if k not in organized_props:
@@ -425,7 +423,6 @@ class TestDriver(SingleCrystalTestDriver):
             }
         for k,v in organized_props.items():
             if k != 'monovacancy-relaxation-volume-crystal-npt': # add reservoir info
-                # TODO: Will need to adjust this based upon input of ground state test
                 organized_props[k].setdefault('reservoir-chemical-potential', {})['source-value'] = [v['chemical_potential'] for k,v in res_info.items()]
                 organized_props[k].setdefault('reservoir-chemical-potential', {})['source-unit'] = UNIT_ENERGY
                 organized_props[k].setdefault('reservoir-prototype-label', {})['source-value'] =   [v['prototype_label'] for k,v in res_info.items()]
@@ -438,13 +435,46 @@ class TestDriver(SingleCrystalTestDriver):
 
         return organized_props
 
+    def _resolve_dependencies(self, material, **kwargs):
+        print("Resolving dependencies...")
+        # relax structure
+        ecs_test = kimvv.EquilibriumCrystalStructure(self._calc)
+        ecs_results = ecs_test(material)
+        for result in ecs_results:
+            if result["property-id"].endswith("crystal-structure-npt"):
+                material_relaxed = result
+                break
+        # get reservoir info
+        gse_test = kimvv.GroundStateEnergy(self._calc)
+        reservoir_info = {}
+        for ele in set(atoms.get_chemical_symbols()):
+            gse_test(ele)
+            # get results and populate
+            result = [gse_test.property_instance]
+            reservoir_info[ele] = results
+        kwargs['reservoir_info'] = reservoir_info
+        return material_relaxed, kwargs    
+    '''
 
 
 if __name__ == "__main__":
     from ase.build import bulk
     from kim_tools import query_crystal_structures
     from kim_query import raw_query
-    
+    from ase.calculators.lj import LennardJones
+    import kimvv
+
+    atoms_init = bulk("Au")
+    MODELS = [
+        "LennardJones612_UniversalShifted__MO_959249795837_003",
+        #"Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
+        LennardJones(sigma=2.42324, epsilon=2.30580, rc=9.69298),
+    ]   
+    for m in MODELS:
+        crystal_structure_relaxed = kimvv.EquilibriumCrystalStructure(m)(atoms_init)[0]
+        test = TestDriver(m)
+        test(crystal_structure_relaxed)
+    '''
     kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
@@ -466,6 +496,7 @@ if __name__ == "__main__":
         test = TestDriver(kim_model_name)
         test(i)#reservoir_info = {'Al': reservoir_info}) 
         test.write_property_instances_to_file()
+    '''
     '''
     kim_model_name = 'MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002'
     list_of_queried_structures = query_crystal_structures(
