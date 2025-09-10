@@ -8,7 +8,7 @@ query({"project": ["shortcode"],
 {{query({"project": ["shortcode"],
        "query": {"kimcode":
                   {"$options": "",
-                   "$regex": "GroundStateStructure_"+element+"__TE_"}},
+                   "$regex": "GroundStateCrystalStructure_"+element+"__TE_"}},
                    "limit": 1, "database": "obj"})}}
 {% endfor %}
                    ]
