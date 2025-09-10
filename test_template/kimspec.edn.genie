@@ -4,12 +4,12 @@
   "extended-id" "{{TEST_DRIVER_NAME.split('_')[:-4]|join('_')}}_{{prototype_label}}_{{stoichiometric_species|join("")}}__TE_{{kimnum}}_{{version}}"
   "test-driver" "{{TEST_DRIVER_NAME}}"
   "species" ["{{stoichiometric_species|join('" "')}}"]
-  "contributor-id" "4ad03136-ed7f-4316-b586-1e94ccceb311"
-  "maintainer-id" "4ad03136-ed7f-4316-b586-1e94ccceb311"
+  "contributor-id" "2bc2738c-f70a-4eb1-b180-67562ea7e4d6"
+  "maintainer-id" "2bc2738c-f70a-4eb1-b180-67562ea7e4d6"
   "executables" ["runner"]
   "domain" "openkim.org"
   "matching-models" ["standard-models"]
   "disclaimer" "Computer generated"
   "kim-api-version" "2.3"
-  "publication-year" "2024"
+  "publication-year" "2025"
 }{# FILENAME = kimspec.edn #}
