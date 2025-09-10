@@ -68,9 +68,7 @@ UNIT_ANGLE = 'degree'
 UNIT_PRESSURE = 'GPa'
 UNIT_VOLUME = UNIT_LENGTH + '^3'
 
-# TODO: Look at rounding of cell parameters which impacts relaxation volume
 class TestDriver(SingleCrystalTestDriver):
-    # TODO: if reservoir info is None set chemical potential to 0 and populate reservoir info
     def _calculate(self, reservoir_info=None, **kwargs):
         self.atoms = self._get_atoms()
         if reservoir_info is None:
@@ -99,8 +97,6 @@ class TestDriver(SingleCrystalTestDriver):
             results.append(self.getResults(idx))
         organized_props = self.organize_properties(results)
         for k,v in organized_props.items():
-            print (k,v)
-
         
             self._add_property_instance_and_common_crystal_genome_keys(k,
                                                                    write_stress=True, write_temp=True)
@@ -110,7 +106,6 @@ class TestDriver(SingleCrystalTestDriver):
                 else:
                     self._add_key_to_current_property_instance(k2, v2['source-value'])
 
-    # First 3 functions could be moved into utility 
     def _createSupercell(self, size):
         atoms = self.atoms.copy()
         atoms.set_calculator(self._calc)
@@ -276,7 +271,6 @@ class TestDriver(SingleCrystalTestDriver):
 
     def getResults(self, idx):
         # grab chemical potential
-        # TODO: don't query, as info will be piped into test, keep below for now to get working
         # add back isolated atom energy
         self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] + self.get_isolated_energy_per_atom(self.atoms[idx].symbol) 
         print ('Chemical Potential', self.chemical_potential)
@@ -418,7 +412,7 @@ class TestDriver(SingleCrystalTestDriver):
             }
             host_info[idx] = {
                 'species': ele,
-                'coord': self.atoms.get_scaled_positions()[i['indices'][0]], # TODO: want fractional?
+                'coord': self.atoms.get_scaled_positions()[i['indices'][0]], 
                 'letter': i['letter']
             }
         for k,v in organized_props.items():
@@ -454,119 +448,4 @@ class TestDriver(SingleCrystalTestDriver):
             reservoir_info[ele] = results
         kwargs['reservoir_info'] = reservoir_info
         return material_relaxed, kwargs    
-    '''
 
-
-if __name__ == "__main__":
-    from ase.build import bulk
-    from kim_tools import query_crystal_structures
-    from kim_query import raw_query
-    from ase.calculators.lj import LennardJones
-    import kimvv
-
-    atoms_init = bulk("Au")
-    MODELS = [
-        "LennardJones612_UniversalShifted__MO_959249795837_003",
-        #"Sim_LAMMPS_LJcut_AkersonElliott_Alchemy_PbAu",
-        LennardJones(sigma=2.42324, epsilon=2.30580, rc=9.69298),
-    ]   
-    for m in MODELS:
-        crystal_structure_relaxed = kimvv.EquilibriumCrystalStructure(m)(atoms_init)[0]
-        test = TestDriver(m)
-        test(crystal_structure_relaxed)
-    '''
-    kim_model_name = 'MEAM_LAMMPS_LeeShimBaskes_2003_Al__MO_353977746962_001'
-    list_of_queried_structures = query_crystal_structures(
-        kim_model_name=kim_model_name,
-        stoichiometric_species=["Al"],
-        prototype_label="A_cF4_225_a",
-    )
-
-    reservoir_info = raw_query(query = {
-            "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-            "meta.subject.extended-id": kim_model_name,
-            "stoichiometric-species.source-value": ["Al"],
-            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
-        },
-        database="data", limit=0
-    )
-
-    for i in list_of_queried_structures:
-        test = TestDriver(kim_model_name)
-        test(i)#reservoir_info = {'Al': reservoir_info}) 
-        test.write_property_instances_to_file()
-    '''
-    '''
-    kim_model_name = 'MEAM_LAMMPS_JeongParkDo_2018_PdAl__MO_616482358807_002'
-    list_of_queried_structures = query_crystal_structures(
-        kim_model_name=kim_model_name,
-        stoichiometric_species=["Al", "Pd"],
-        prototype_label="AB_hR26_148_a2f_b2f",
-    )
-
-    res= {}
-    reservoir_info = raw_query(query = {
-            "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-            "meta.subject.extended-id": kim_model_name,
-            "stoichiometric-species.source-value": ["Al"],
-            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
-        },
-        database="data", limit=0
-    )
-    res['Al'] = reservoir_info
-
-    reservoir_info = raw_query(query = {
-            "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-            "meta.subject.extended-id": kim_model_name,
-            "stoichiometric-species.source-value": ["Pd"],
-            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
-        },
-        database="data", limit=0
-    )
-    res['Pd'] = reservoir_info
-
-    for i in list_of_queried_structures:
-        test = TestDriver(kim_model_name)
-        test(i, reservoir_info = res)   
-        test.write_property_instances_to_file()
-    '''
-    
-    '''
-    kim_model_name = 'Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000'
-    list_of_queried_structures = query_crystal_structures(
-        kim_model_name=kim_model_name,
-        stoichiometric_species=["Ce", 'O'],
-        prototype_label="AB2_cF12_225_a_c",
-    )
-
-    reservoir_dict = {}
-
-    reservoir_info = raw_query(query = {
-            "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-            "meta.subject.extended-id": kim_model_name,
-            "stoichiometric-species.source-value": ["Ce"],
-            "prototype-label.source-value": "A_cF4_225_a", # ground state prototype
-        },
-        database="data", limit=0
-    )
-    reservoir_dict['Ce'] =  reservoir_info
-
-    reservoir_info = raw_query(query = {
-            "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2023-02-21:property/binding-energy-crystal",
-            "meta.subject.extended-id": kim_model_name,
-            "stoichiometric-species.source-value": ["O"],
-            "prototype-label.source-value": "A_mC16_12_2ij", # ground state prototype
-        },
-        database="data", limit=0
-    )
-    reservoir_dict['O'] =  reservoir_info
-
-    for i in list_of_queried_structures:
-        test = TestDriver(kim_model_name)
-        test(i, reservoir_info = reservoir_dict)
-    '''
