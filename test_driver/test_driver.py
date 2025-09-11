@@ -439,12 +439,10 @@ class TestDriver(SingleCrystalTestDriver):
                 material_relaxed = result
                 break
         # get reservoir info
-        gse_test = kimvv.GroundStateEnergy(self._calc)
+        gse_test = kimvv.GroundStateCrystalStructure(self._calc)
         reservoir_info = {}
-        for ele in set(atoms.get_chemical_symbols()):
-            gse_test(ele)
-            # get results and populate
-            result = [gse_test.property_instance]
+        for ele in result['stoichiometric-species']['source-value']:
+            results = gse_test(ele)
             reservoir_info[ele] = results
         kwargs['reservoir_info'] = reservoir_info
         return material_relaxed, kwargs    
