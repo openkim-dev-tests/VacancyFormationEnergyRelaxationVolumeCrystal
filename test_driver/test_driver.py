@@ -7,7 +7,6 @@ from scipy.optimize import fmin
 import sys
 import math
 from collections import OrderedDict
-import kimvv
 
 KEY_SOURCE_VALUE = 'source-value'
 KEY_SOURCE_UNIT = 'source-unit'
@@ -430,6 +429,7 @@ class TestDriver(SingleCrystalTestDriver):
         return organized_props
 
     def _resolve_dependencies(self, material, **kwargs):
+        import kimvv
         print("Resolving dependencies...")
         # relax structure
         ecs_test = kimvv.EquilibriumCrystalStructure(self._calc)
