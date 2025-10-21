@@ -77,9 +77,7 @@ class TestDriver(SingleCrystalTestDriver):
                 reservoir_info[e] = [{"binding-potential-energy-per-atom":{"source-value": 0}, "prototype-label": {"source-value": 'Not provided'}}]
         self.reservoir_info = reservoir_info 
         prototype_label  = self._SingleCrystalTestDriver__nominal_crystal_structure_npt['prototype-label']['source-value']
-        # TODO: print below to see if it contains multiplicity
-        #        for wkof in self.equivalent_atoms:
-        #           mult = len(wkof['indices'])
+        self.prototype_label = prototype_label
         self.equivalent_atoms = get_atom_indices_for_each_wyckoff_orb(prototype_label)
         # store intermediate results for effective vacancy
         self.effective_results = []
@@ -104,7 +102,7 @@ class TestDriver(SingleCrystalTestDriver):
         for k,v in organized_props.items():
         
             self._add_property_instance_and_common_crystal_genome_keys(k,
-                                                                   write_stress=True, write_temp=True)
+                                                                   write_stress=False, write_temp=False)
             for k2,v2 in v.items():
                 if 'source-unit' in v2:
                     self._add_key_to_current_property_instance(k2, v2['source-value'], v2['source-unit'])
@@ -112,7 +110,6 @@ class TestDriver(SingleCrystalTestDriver):
                     self._add_key_to_current_property_instance(k2, v2['source-value'])
         
         # combine effective results, extrapolate and write property
-        print (self.bulk_energies)
         bulkEnergies = [v for k,v in self.bulk_energies.items()]
         sizes =  [k for k,v in self.bulk_energies.items()]
         effectiveUnrelaxedList = []
@@ -121,14 +118,28 @@ class TestDriver(SingleCrystalTestDriver):
             effectiveUnrelaxed = 0
             effectiveRelaxed = 0
             for effRes in self.effective_results:
-                effectiveUnrelaxed += (effRes['multiplicity']/len(self.atoms) * effRes['unrelaxed'][idx]) - (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
-                effectiveRelaxed += (effRes['multiplicity']/len(self.atoms) * effRes['relaxed'][idx]) - (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
+                effectiveUnrelaxed += (effRes['multiplicity']/len(self.atoms) * effRes['unrelaxed'][idx])# - (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
+                effectiveRelaxed += (effRes['multiplicity']/len(self.atoms) * effRes['relaxed'][idx])# - (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
+            effectiveUnrelaxed -= (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
+            effectiveRelaxed -= (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
             effectiveUnrelaxedList.append(effectiveUnrelaxed)
             effectiveRelaxedList.append(effectiveRelaxed)
-        
-        print (effectiveUnrelaxedList)
-        print (effectiveRelaxedList)
+        uev, rev = self.extrapolate(effectiveUnrelaxedList, effectiveRelaxedList)
+        self._add_property_instance_and_common_crystal_genome_keys(
+            "effective-vacancy-unrelaxed-formation-potential-energy",
+            write_stress=False, 
+            write_temp=False
+        )
+        self._add_key_to_current_property_instance("unrelaxed-effective-formation-potential-energy", uev, UNIT_ENERGY)
 
+        self._add_property_instance_and_common_crystal_genome_keys(
+            "effective-vacancy-relaxed-formation-potential-energy", 
+            write_stress=False, 
+            write_temp=False
+        )
+        self._add_key_to_current_property_instance("relaxed-effective-formation-potential-energy", rev, UNIT_ENERGY)
+        
+        
     def _createSupercell(self, size):
         atoms = self.atoms.copy()
         atoms.set_calculator(self._calc)
@@ -162,7 +173,6 @@ class TestDriver(SingleCrystalTestDriver):
 
         # Create Vacancy 
         del atoms[idx]
-        # TODO: Store this in self.variable along with multiplicity also need bulk value as well
         enAtomsWithVacancy = atoms.get_potential_energy()
 
         print('Energy of Unrelaxed Cell With Vacancy:\n', enAtomsWithVacancy)
@@ -210,7 +220,7 @@ class TestDriver(SingleCrystalTestDriver):
                     full_output = True,
                 )[:2]
                 self.VFEUncert = np.abs(tmpEnVacancy - enVacancy)
-                enVacancy = tmpEnVacancy
+                enVacancy = tmpEnVacancy - enAtoms + self.chemical_potential
                 oldVolume = np.linalg.det(self._cellVector2Cell(relaxedCellVector))
                 newVolume = np.linalg.det(self._cellVector2Cell(tmpCellVector.tolist()))
                 self.VRVUncert = np.abs(newVolume - oldVolume)
@@ -219,6 +229,7 @@ class TestDriver(SingleCrystalTestDriver):
 
             # Evf = Ev - E0 + mu, where mu is chemical potential of removed element
             enVacancy = tmpEnVacancy - enAtoms + self.chemical_potential
+            print ('enVacancy', enVacancy)
             relaxedCellVector = tmpCellVector.tolist()
             # for effective
             effectiveRelaxed = tmpEnVacancy 
@@ -302,8 +313,10 @@ class TestDriver(SingleCrystalTestDriver):
         if len(set(self.atoms.get_chemical_symbols())) == 1:
             print ("Single element crystal detected-using self as reservoir.")
             self.chemical_potential = self.atoms.get_potential_energy()/len(self.atoms) 
+            self.single_element = True
         else:
             self.chemical_potential = self.reservoir_info[self.atoms[idx].symbol][0]["binding-potential-energy-per-atom"]["source-value"] + self.get_isolated_energy_per_atom(self.atoms[idx].symbol) 
+            self.single_element = False
         print ('Chemical Potential', self.chemical_potential)
 
 
@@ -332,6 +345,7 @@ class TestDriver(SingleCrystalTestDriver):
         print('Formation Energy By Size:\n', formationEnergyBySize)
         print('Relaxation Volume By Size:\n', relaxationVolumeBySize)
         self.effective_results.append({'multiplicity': mult, 'unrelaxed': unrelaxedEffectiveBySize, "relaxed": relaxedEffectiveBySize})
+        self.sizes = sizes
 
         # Extrapolate for VFE and VRV of Infinite Size
         print('\n[Extrapolation]')
@@ -417,11 +431,65 @@ class TestDriver(SingleCrystalTestDriver):
             ('relaxation-volume', V(relaxationVolume, UNIT_VOLUME, relaxationVolumeUncert)),
         ])
 
-        results = {"monovacancy-unrelaxed-formation-potential-energy-crystal-npt": unrelaxedformationEnergyResult, 
-                   "monovacancy-relaxed-formation-potential-energy-crystal-npt": formationEnergyResult, 
-                   "monovacancy-relaxation-volume-crystal-npt": relaxationVolumeResult}
+        results = {"monovacancy-unrelaxed-formation-potential-energy-crystal": unrelaxedformationEnergyResult, 
+                   "monovacancy-relaxed-formation-potential-energy-crystal": formationEnergyResult, 
+                   "monovacancy-relaxation-volume-crystal": relaxationVolumeResult}
         return results
 
+    def extrapolate(self, unrelaxed, relaxed):
+        naSizes = np.array(self.sizes)
+        naUnrelaxed = np.array(unrelaxed)
+        naRelaxed = np.array(relaxed)
+        unrelaxedEffectiveFormationEnergyFitsBySize = []
+        effectiveFormationEnergyFitsBySize = []
+        for i in range(0, len(FITS_CNT)):
+            cnt = FITS_CNT[i] # Num of Data Points Used
+            orders = FITS_ORDERS[i] # Orders Included
+            print('Fitting with', cnt, 'points, including orders', orders)
+            unrelaxedEffectiveFormationEnergyFits = []
+            relaxedEffectiveFormationEnergyFits = []
+            for j in range(0, len(self.sizes) - cnt + 1):
+                print('Fit with data beginning', j)
+                xdata = naSizes[j:(j + cnt)]
+                unrelaxedEffectiveFormationEnergyFits.append(self._getFit(
+                    xdata,
+                    naUnrelaxed[j:(j + cnt)],
+                    orders
+                )[0])
+                relaxedEffectiveFormationEnergyFits.append(self._getFit(
+                    xdata,
+                    naRelaxed[j:(j + cnt)],
+                    orders
+                )[0])
+            unrelaxedEffectiveFormationEnergyFitsBySize.append(unrelaxedEffectiveFormationEnergyFits)
+            effectiveFormationEnergyFitsBySize.append(relaxedEffectiveFormationEnergyFits)
+
+        # Output Fitting Results
+        print('\n[Fitting Results Summary]')
+        print('Sizes:', self.sizes)
+        print('Data Points Used:', FITS_CNT)
+        print('Orders Included:\n', FITS_ORDERS)
+        print('Unrelaxed Effective Formation Energy Fits By Size:\n', unrelaxedEffectiveFormationEnergyFitsBySize)
+        print('Effective Formation Energy Fits By Size:\n', effectiveFormationEnergyFitsBySize)
+
+        # Obtain Extrapolated Value and Uncertainty
+        unrelaxedEffectiveFormationEnergy, unrelaxedEffectiveFormationEnergyUncert = self._getValueUncert(
+            FITS_VFE_VALUE,
+            FITS_VFE_UNCERT,
+            # FMIN_FTOL * formationEnergyBySize[-1],
+            self.VFEUncert,
+            2,
+            unrelaxedEffectiveFormationEnergyFitsBySize,
+        )
+        relaxedEffectiveFormationEnergy, relaxedEffectiveFormationEnergyUncert = self._getValueUncert(
+            FITS_VFE_VALUE,
+            FITS_VFE_UNCERT,
+            # FMIN_FTOL * formationEnergyBySize[-1],
+            self.VFEUncert,
+            2,
+            effectiveFormationEnergyFitsBySize,
+        )
+        return unrelaxedEffectiveFormationEnergy, relaxedEffectiveFormationEnergy
     def organize_properties(self, results):
         organized_props = {}
         for r in results:
@@ -442,17 +510,23 @@ class TestDriver(SingleCrystalTestDriver):
         host_info = {}
         for idx,i in enumerate(self.equivalent_atoms):
             ele = self.atoms.get_chemical_symbols()[i['indices'][0]]
-            res_info[ele] = {
-                'chemical_potential': self.reservoir_info[ele][0]["binding-potential-energy-per-atom"]["source-value"],
-                'prototype_label': self.reservoir_info[ele][0]["prototype-label"]["source-value"]
-            }
+            if self.single_element:
+                res_info[ele] = {
+                    'chemical_potential': self.chemical_potential,
+                    'prototype_label': self.prototype_label
+                }
+            else:
+                res_info[ele] = {
+                    'chemical_potential': self.reservoir_info[ele][0]["binding-potential-energy-per-atom"]["source-value"],
+                    'prototype_label': self.reservoir_info[ele][0]["prototype-label"]["source-value"]
+                }
             host_info[idx] = {
                 'species': ele,
                 'coord': self.atoms.get_scaled_positions()[i['indices'][0]], 
                 'letter': i['letter']
             }
         for k,v in organized_props.items():
-            if k != 'monovacancy-relaxation-volume-crystal-npt': # add reservoir info
+            if k != 'monovacancy-relaxation-volume-crystal': # add reservoir info
                 organized_props[k].setdefault('reservoir-chemical-potential', {})['source-value'] = [v['chemical_potential'] for k,v in res_info.items()]
                 organized_props[k].setdefault('reservoir-chemical-potential', {})['source-unit'] = UNIT_ENERGY
                 organized_props[k].setdefault('reservoir-prototype-label', {})['source-value'] =   [v['prototype_label'] for k,v in res_info.items()]
@@ -486,7 +560,15 @@ class TestDriver(SingleCrystalTestDriver):
 
 if __name__ == "__main__":
     from ase.build import bulk
-    atoms_init = bulk("Au")
-    kim_model_name = "EAM_Dynamo_Ackland_1987_Au__MO_754413982908_001"
+    from kim_tools import query_crystal_structures
+    kim_model_name = "EAM_IMD_SchopfBrommerFrigan_2012_AlMnPd__MO_878712978062_003"
+    #kim_model_name = "EAM_Dynamo_AcklandTichyVitek_1987_Ni__MO_977363131043_005"
+    list_of_queried_structures = query_crystal_structures(
+        kim_model_name=kim_model_name,
+        stoichiometric_species=['Al', 'Pd'],
+        prototype_label="A2B_cF12_225_c_a",
+    )
     test = TestDriver(kim_model_name)
-    test(atoms_init)
+    test(list_of_queried_structures[0])
+    #test(bulk('Ni'))
+    test.write_property_instances_to_file()
