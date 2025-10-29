@@ -126,14 +126,14 @@ class TestDriver(SingleCrystalTestDriver):
             effectiveRelaxedList.append(effectiveRelaxed)
         uev, rev = self.extrapolate(effectiveUnrelaxedList, effectiveRelaxedList)
         self._add_property_instance_and_common_crystal_genome_keys(
-            "effective-vacancy-unrelaxed-formation-potential-energy",
+            "effective-vacancy-unrelaxed-formation-potential-energy-crystal",
             write_stress=False, 
             write_temp=False
         )
         self._add_key_to_current_property_instance("unrelaxed-effective-formation-potential-energy", uev, UNIT_ENERGY)
 
         self._add_property_instance_and_common_crystal_genome_keys(
-            "effective-vacancy-relaxed-formation-potential-energy", 
+            "effective-vacancy-relaxed-formation-potential-energy-crystal", 
             write_stress=False, 
             write_temp=False
         )
