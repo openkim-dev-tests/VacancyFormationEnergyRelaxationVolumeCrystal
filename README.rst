@@ -6,8 +6,16 @@ SUMMARY
   
   It works for all prototypes-generating all symmetry unique vacancies.
   Vacancy energies are calculated by considering the vacancy moving to a known reference reservoir crystal structure and including the chemical potential associated with this. 
-  Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`_.
+  Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`_. 
   Chemical potentials are model specific and taken from the reference-elemental-energy property.
+  Reference chemical potentials are not used for Single element systems. Rather, the reservoir is considered to be the same system from which the vacancy came.
+
+  In addition to the standard vacancy formation energy, an effective (un)relaxed vacancy formation energy is also computed.
+  It is computed by considering the the case where vacancies are thermally generated under the constraint that composi-
+tion is preserved. It is computed according to the equation:
+e_eff = Sum_i (x_i * E_v^i) - (N - 1) / N * E_b
+where the sum is over all vacancy types and x_i corresponds to the number fraction of a vacancy type, E_v^i is the energy of the strucuture with N - 1 atoms and a vacancy of type i, and E_b is the energy of the N atom bulk structure.
+  
 
   For structures that are not stable upon the creation of a monovacancy, it reports the relaxation result in stdout.
   For structures that are stable, it reports in results.edn the value of vacancy formation energy and relaxation volume.
