@@ -1,6 +1,6 @@
 {
-  "title" "Monovacancy formation energy and relaxation volume for {{stoichiometric_species|join("")}} in AFLOW crystal prototype {{prototype_label}}" 
-  "description" "Computes unrelaxed and relaxed monovancany formation energies and relaxation volume for {{stoichiometric_species|join("")}} in AFLOW crystal prototype {{prototype_label}} at zero temperature and zero pressure" 
+  "title" "Monovacancy formation energy and relaxation volume for {{stoichiometric_species|join("")}} in AFLOW crystal prototype {{prototype_label}} v{{version}}" 
+  "description" "Computes unrelaxed and relaxed monovacancy formation energies and relaxation volume for {{stoichiometric_species|join("")}} in AFLOW crystal prototype {{prototype_label}} at zero temperature and zero pressure" 
   "extended-id" "{{TEST_DRIVER_NAME.split('_')[:-4]|join('_')}}_{{prototype_label}}_{{stoichiometric_species|join("")}}__TE_{{kimnum}}_{{version}}"
   "test-driver" "{{TEST_DRIVER_NAME}}"
   "species" ["{{stoichiometric_species|join('" "')}}"]

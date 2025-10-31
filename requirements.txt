@@ -1,1 +1,4 @@
 kim-tools
+numpy
+scipy
+ase
