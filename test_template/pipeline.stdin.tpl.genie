@@ -23,7 +23,7 @@
 "{{element}}": @< query({
         "query": {
             "meta.type":"tr",
-            "property-id":"tag:staff@noreply.openkim.org,2025-09-10:property/reference-elemental-energy",
+            "property-id":"tag:staff@noreply.openkim.org,2025-09-10:property/elemental-crystal-ground-state",
             "meta.subject.extended-id":MODELNAME,
             "stoichiometric-species.source-value": ["{{element}}"],
         },
