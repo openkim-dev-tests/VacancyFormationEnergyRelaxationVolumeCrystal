@@ -58,14 +58,15 @@ FITS_VRV_VALUE = 0 # Vacancy Relaxation Volume
 FITS_VRV_UNCERT = [1, 2]
 
 # Strings for Output
-KEY_SOURCE_VALUE = 'source-value'
-KEY_SOURCE_UNIT = 'source-unit'
-KEY_SOURCE_UNCERT = 'source-std-uncert-value'
 UNIT_ENERGY = 'eV'
 UNIT_LENGTH = 'angstrom'
 UNIT_ANGLE = 'degree'
 UNIT_PRESSURE = 'GPa'
 UNIT_VOLUME = UNIT_LENGTH + '^3'
+
+# Disclaimer Uncertainty
+DISCLAIMER_THRESHOLD_PERCENT = 1.
+DISCLAIMER = f"value has an estimated uncertainty greater than {DISCLAIMER_THRESHOLD_PERCENT}%."
 
 class TestDriver(SingleCrystalTestDriver):
     def _calculate(self, reservoir_info=None, **kwargs):
@@ -98,14 +99,21 @@ class TestDriver(SingleCrystalTestDriver):
         for wkof in self.equivalent_atoms:
             idx = wkof['indices'][0] 
             results.append(self.getResults(idx, len(wkof['indices'])))
-        organized_props = self.organize_properties(results)
+        organized_props, uncertainty = self.organize_properties(results)
         for k,v in organized_props.items():
-        
+            disclaimer = None
+            for u in uncertainty[k]["percent"]:
+                if u > DISCLAIMER_THRESHOLD_PERCENT: 
+                    disclaimer = f"{uncertainty[k]['prop']} " + DISCLAIMER
+                    print ("DISCLAIMER:" + disclaimer)
             self._add_property_instance_and_common_crystal_genome_keys(k,
-                                                                   write_stress=False, write_temp=False)
+                                                                   write_stress=False, write_temp=False, disclaimer=disclaimer)
             for k2,v2 in v.items():
                 if 'source-unit' in v2:
-                    self._add_key_to_current_property_instance(k2, v2['source-value'], v2['source-unit'])
+                    if k2 == uncertainty[k]["prop"]:
+                        self._add_key_to_current_property_instance(k2, v2['source-value'], v2['source-unit'], {KEY_SOURCE_UNCERT: uncertainty[k]['values']})
+                    else:
+                        self._add_key_to_current_property_instance(k2, v2['source-value'], v2['source-unit'])
                 else:
                     self._add_key_to_current_property_instance(k2, v2['source-value'])
         
@@ -124,20 +132,30 @@ class TestDriver(SingleCrystalTestDriver):
             effectiveRelaxed -= (len(self.atoms) * sizes[idx]**3 - 1) / (len(self.atoms) * sizes[idx]**3) * be
             effectiveUnrelaxedList.append(effectiveUnrelaxed)
             effectiveRelaxedList.append(effectiveRelaxed)
-        uev, rev = self.extrapolate(effectiveUnrelaxedList, effectiveRelaxedList)
+        uev, rev, ueu, reu  = self.extrapolate(effectiveUnrelaxedList, effectiveRelaxedList)
+        disclaimer = None
+        if ueu / uev *100 > DISCLAIMER_THRESHOLD_PERCENT:
+            disclaimer = "unrelaxed-effective-formation-potential-energy " + DISCLAIMER
+            print ("DISCLAIMER: "+ disclaimer)
         self._add_property_instance_and_common_crystal_genome_keys(
             "effective-vacancy-unrelaxed-formation-potential-energy-crystal",
             write_stress=False, 
-            write_temp=False
+            write_temp=False,
+            disclaimer=disclaimer
         )
-        self._add_key_to_current_property_instance("unrelaxed-effective-formation-potential-energy", uev, UNIT_ENERGY)
+        self._add_key_to_current_property_instance("unrelaxed-effective-formation-potential-energy", uev, UNIT_ENERGY, {KEY_SOURCE_UNCERT: ueu})
 
+        disclaimer = None
+        if reu / rev *100 > DISCLAIMER_THRESHOLD_PERCENT:
+            disclaimer = "relaxed-effective-formation-potential-energy " + DISCLAIMER
+            print ("DISCLAIMER: "+ disclaimer)
         self._add_property_instance_and_common_crystal_genome_keys(
             "effective-vacancy-relaxed-formation-potential-energy-crystal", 
             write_stress=False, 
-            write_temp=False
+            write_temp=False,
+            disclaimer=disclaimer
         )
-        self._add_key_to_current_property_instance("relaxed-effective-formation-potential-energy", rev, UNIT_ENERGY)
+        self._add_key_to_current_property_instance("relaxed-effective-formation-potential-energy", rev, UNIT_ENERGY, {KEY_SOURCE_UNCERT: reu})
         
         
     def _createSupercell(self, size):
@@ -219,7 +237,7 @@ class TestDriver(SingleCrystalTestDriver):
                     xtol = FMIN_XTOL * EPS,
                     full_output = True,
                 )[:2]
-                self.VFEUncert = np.abs(tmpEnVacancy - enVacancy)
+                self.VFEUncert = np.abs(tmpEnVacancy - effectiveRelaxed)
                 enVacancy = tmpEnVacancy - enAtoms + self.chemical_potential
                 oldVolume = np.linalg.det(self._cellVector2Cell(relaxedCellVector))
                 newVolume = np.linalg.det(self._cellVector2Cell(tmpCellVector.tolist()))
@@ -489,21 +507,26 @@ class TestDriver(SingleCrystalTestDriver):
             2,
             effectiveFormationEnergyFitsBySize,
         )
-        return unrelaxedEffectiveFormationEnergy, relaxedEffectiveFormationEnergy
+        return unrelaxedEffectiveFormationEnergy, relaxedEffectiveFormationEnergy, unrelaxedEffectiveFormationEnergyUncert, relaxedEffectiveFormationEnergyUncert
     def organize_properties(self, results):
+        uncertainty = {}
         organized_props = {}
         for r in results:
             for k,v in r.items():
                 if k not in organized_props:
                     organized_props[k] = {}
+                if k not in uncertainty:
+                    uncertainty[k] = {"values": [], "percent": []}
                 for k2,v2 in v.items():
                     if k2 not in organized_props[k]:
                         organized_props[k][k2] = {}
                         organized_props[k][k2]['source-value'] = [v2['source-value']]
                     else:
                         organized_props[k][k2]['source-value'].append(v2['source-value'])
+                uncertainty[k]['values'].append(v2[KEY_SOURCE_UNCERT])
+                uncertainty[k]['percent'].append(v2[KEY_SOURCE_UNCERT] / v2['source-value'] * 100.)
+                uncertainty[k]['prop'] = k2
                 organized_props[k][k2]['source-unit'] = v2['source-unit'] # must all be same
-                # TODO: look at uncertainty later
        
         # get reservoir and host info
         res_info = {}
@@ -537,7 +560,7 @@ class TestDriver(SingleCrystalTestDriver):
             organized_props[k].setdefault('host-primitive-cell', {})['source-value'] = self.atoms.get_cell()[:,:]
             organized_props[k].setdefault('host-primitive-cell', {})['source-unit'] = UNIT_LENGTH
 
-        return organized_props
+        return organized_props, uncertainty
 
     def _resolve_dependencies(self, material, **kwargs):
         import kimvv
@@ -568,6 +591,7 @@ if __name__ == "__main__":
         stoichiometric_species=['Al', 'Pd'],
         prototype_label="A2B_cF12_225_c_a",
     )
+    print (type(list_of_queried_structures),list_of_queried_structures)
     test = TestDriver(kim_model_name)
     test(list_of_queried_structures[0])
     #test(bulk('Ni'))
