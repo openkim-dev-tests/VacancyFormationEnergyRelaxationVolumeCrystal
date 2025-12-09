@@ -7,7 +7,7 @@ SUMMARY
   It works for all prototypes-generating all symmetry unique vacancies.
   Vacancy energies are calculated by considering the vacancy moving to a known reference reservoir crystal structure and including the chemical potential associated with this. 
   Reference reservoirs are element specific to the removed atom and follow those used by `CHIPS-FF <https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json>`_. 
-  Chemical potentials are model specific and taken from the reference-elemental-energy property.
+  Chemical potentials are model specific and taken from the elemental-crystal-ground-state property.
   Reference chemical potentials are not used for Single element systems. Rather, the reservoir is considered to be the same system from which the vacancy came.
 
   In addition to the standard vacancy formation energy, an effective (un)relaxed vacancy formation energy is also computed.
