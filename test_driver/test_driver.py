@@ -87,13 +87,12 @@ class TestDriver(SingleCrystalTestDriver):
         if DYNAMIC_CELL_SIZE == True:
             numAtoms = self.atoms.get_number_of_atoms()
             factor = math.pow(8 / numAtoms, 0.333)
-            global CELL_SIZE_MIN, CELL_SIZE_MAX
-            CELL_SIZE_MIN = int(math.ceil(factor * CELL_SIZE_MIN))
-            CELL_SIZE_MAX = CELL_SIZE_MIN + 2
-            print('CELL_SIZE_MIN:', CELL_SIZE_MIN)
-            print('CELL_SIZE_MAX:', CELL_SIZE_MAX)
-            print('Smallest System Size:', numAtoms * CELL_SIZE_MIN**3)
-            print('Largest System Size:', numAtoms * CELL_SIZE_MAX**3)
+            self.cell_size_min = int(math.ceil(factor * CELL_SIZE_MIN))
+            self.cell_size_max = self.cell_size_min + 2
+            print('CELL_SIZE_MIN:', self.cell_size_min)
+            print('CELL_SIZE_MAX:', self.cell_size_max)
+            print('Smallest System Size:', numAtoms * self.cell_size_min**3)
+            print('Largest System Size:', numAtoms * self.cell_size_max**3)
 
         results = []
         for wkof in self.equivalent_atoms:
@@ -348,7 +347,7 @@ class TestDriver(SingleCrystalTestDriver):
         unrelaxedEffectiveBySize = []
         relaxedEffectiveBySize = []
         print('\n[Calculation]')
-        for size in range(CELL_SIZE_MIN, CELL_SIZE_MAX + 1):
+        for size in range(self.cell_size_min, self.cell_size_max + 1):
             unrelaxedFormationEnergy, relaxedCellVector, relaxedFormationEnergy, relaxationVolume, unrelaxedEffective, relaxedEffective = self._getResultsForSize(size, idx)
             sizes.append(size)
             unrelaxedformationEnergyBySize.append(unrelaxedFormationEnergy)
