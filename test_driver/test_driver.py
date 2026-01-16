@@ -565,14 +565,14 @@ class TestDriver(SingleCrystalTestDriver):
         import kimvv
         print("Resolving dependencies...")
         # relax structure
-        ecs_test = kimvv.EquilibriumCrystalStructure(self._calc)
+        ecs_test = kimvv.EquilibriumCrystalStructure(self.model)
         ecs_results = ecs_test(material)
         for result in ecs_results:
             if result["property-id"].endswith("crystal-structure-npt"):
                 material_relaxed = result
                 break
         # get reservoir info
-        gse_test = kimvv.GroundStateCrystalStructure(self._calc)
+        gse_test = kimvv.GroundStateCrystalStructure(self.model)
         reservoir_info = {}
         for ele in result['stoichiometric-species']['source-value']:
             results = gse_test(ele)
