@@ -242,6 +242,15 @@ class TestDriver(SingleCrystalTestDriver):
                 newVolume = np.linalg.det(self._cellVector2Cell(tmpCellVector.tolist()))
                 self.VRVUncert = np.abs(newVolume - oldVolume)
                 relaxedCellVector = tmpCellVector.tolist()
+                relaxedCell = self._cellVector2Cell(relaxedCellVector)
+                relaxedCellVolume = np.abs(np.linalg.det(relaxedCell))
+                relaxationVolume = unrelaxedCellVolume - relaxedCellVolume
+                print('Current VFE:', enVacancy)
+                print('Energy of Supercell:', enAtoms)
+                print('Unrelaxed Cell Volume:', unrelaxedCellVolume)
+                print('Current Relaxed Cell Volume:', relaxedCellVolume)
+                print('Current Relaxation Volume:', relaxationVolume)
+                print('Current Cell:\n', np.array(self._cellVector2Cell(relaxedCellVector)))
                 break
 
             # Evf = Ev - E0 + mu, where mu is chemical potential of removed element
@@ -275,7 +284,6 @@ class TestDriver(SingleCrystalTestDriver):
             if np.abs(enVacancy) > COLLAPSE_CRITERIA_ENERGY * np.abs(enAtoms):
                 print('System Collapsed. System Energy significantly changed.')
                 sys.exit(0)
-
 
         # Print Summary
         print('---------------')
@@ -583,12 +591,12 @@ class TestDriver(SingleCrystalTestDriver):
 if __name__ == "__main__":
     from ase.build import bulk
     from kim_tools import query_crystal_structures
-    kim_model_name = "EAM_IMD_SchopfBrommerFrigan_2012_AlMnPd__MO_878712978062_003"
+    kim_model_name = "EAM_Dynamo_KumarLudhwaniDas_2023_FeH__MO_680566758384_000"
     #kim_model_name = "EAM_Dynamo_AcklandTichyVitek_1987_Ni__MO_977363131043_005"
     list_of_queried_structures = query_crystal_structures(
         kim_model_name=kim_model_name,
-        stoichiometric_species=['Al', 'Pd'],
-        prototype_label="A2B_cF12_225_c_a",
+        stoichiometric_species=['H'],
+        prototype_label="A_hP2_194_c",
     )
     print (type(list_of_queried_structures),list_of_queried_structures)
     test = TestDriver(kim_model_name)
