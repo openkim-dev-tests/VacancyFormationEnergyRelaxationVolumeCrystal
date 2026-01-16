@@ -18,7 +18,7 @@
     },
     "database":"data", "limit":0,
 }) >@{% else %}{{parameter_sets}}{% endif %}
-{
+{%if stoichiometric_species|length > 1  %}{
 {%- for element in stoichiometric_species -%}
 "{{element}}": @< query({
         "query": {
@@ -26,6 +26,6 @@
             "property-id":"tag:staff@noreply.openkim.org,2025-09-10:property/elemental-crystal-ground-state",
             "meta.subject.extended-id":MODELNAME,
             "stoichiometric-species.source-value": ["{{element}}"],
-        },
-        "database":"data", "limit":0,}) >@,{% endfor %}}
-
+        },"database":"data", "limit":0,}) >@,{% endfor %}}
+{% else %}None
+{%- endif -%}
