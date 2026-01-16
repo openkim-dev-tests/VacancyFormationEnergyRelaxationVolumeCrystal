@@ -1,4 +1,28 @@
-{
-  "simulator-name" "ase"
-  "kim-api-version" "2.3"
-}
+{"contributor-id" "2bc2738c-f70a-4eb1-b180-67562ea7e4d6"
+ "description" "This test driver calculates the vacancy formation energy and relaxation volume at zero temperature and zero pressure. It works for all prototypes-generating all symmetry unique vacancies. Vacancy energies are calculated by considering the vacancy moving to a known reference reservoir crystal structure and including the chemical potential associated with this. Reference reservoirs are element specific to the removed atom and follow those used by CHIPS-FF. Chemical potentials are model specific and taken from the elemental-crystal-ground-state property. Reference chemical potentials are not used for single element systems. Rather, the reservoir is considered to be the same system from which the vacancy came.\n\n  In addition to the standard vacancy formation energy, an effective (un)relaxed vacancy formation energy is also computed. It is computed by considering the the case where vacancies are thermally generated under the constraint that composition is preserved. It is computed according to the equation:\n  e_eff = Sum_i (x_i * E_v^i) - (N - 1) / N * E_b\n  where the sum is over all vacancy types and x_i corresponds to the number fraction of a vacancy type, E_v^I is the energy of the strucuture with N - 1 atoms and a vacancy of type i, and E_b is the energy of the N atom bulk structure.\n  \n  For structures that are not stable upon the creation of a monovacancy, it reports the relaxation result in stdout. For structures that are stable, it reports in results.edn the value of vacancy formation energy and relaxation volume.\n  \nMETHOD\n  \n  The calculation consists of two steps for each unique Wyckoff site monovacancy:\n  \n  1. Calculate the vacancy formation energy and relaxation volume corresponding to three different sizes of supercell.\n  The minimum size is determined by the smallest number n, which makes a n*n*n unit cell with at least 216 atoms.\n  The other two sizes are the two numbers that follows the minimum size.\n  \n  The Calculation of each size starts from constructing the periodic supercell, then take out one atom from the supercell.\n  Then it does the relaxation of positions within the supercell and the relaxation of the cell vectors alternatively, until converge.\n  It will stop when it finds the volume decreased significantly or the potential energy decreased significantly, which indicates the crystal collapse.\n  \n  2. Extrapolate from these three results to get the value corresponding to an infinitely large supercell.\n  \n  The extrapolation is based on the elastic theory, which gives the dependencies of vacancy formation energy and relaxation volume on r are 1/r^3.\n  Therefore, we use the two larger size to fit f(x) = a0 + a1/r^3, and obtain a0, which we use as the value"
+ "developer" ["2bc2738c-f70a-4eb1-b180-67562ea7e4d6"
+              "c429164b-1b03-4ce3-a3a8-2568dd2bc449"]
+ "doi" "10.25950/cea3ae2e"
+ "domain" "openkim.org"
+ "executables" ["runner" "test_template/runner"]
+ "extended-id" "VacancyFormationEnergyRelaxationVolumeCrystal__TD_075370685332_000"
+ "kim-api-version" "2.3"
+ "maintainer-id" "2bc2738c-f70a-4eb1-b180-67562ea7e4d6"
+ "properties" ["tag:staff@noreply.openkim.org,2025-10-07:property/effective-vacancy-relaxed-formation-potential-energy-crystal"
+               "tag:staff@noreply.openkim.org,2025-10-07:property/effective-vacancy-unrelaxed-formation-potential-energy-crystal"
+               "tag:staff@noreply.openkim.org,2025-09-10:property/monovacancy-relaxation-volume-crystal"
+               "tag:staff@noreply.openkim.org,2025-09-10:property/monovacancy-relaxed-formation-potential-energy-crystal"
+               "tag:staff@noreply.openkim.org,2025-09-10:property/monovacancy-unrelaxed-formation-potential-energy-crystal"]
+ "publication-year" "2025"
+ "simulator-name" "ase"
+ "source-citations" [{"author" ""
+                      "doi" ""
+                      "howpublished" ""
+                      "month" ""
+                      "note" ""
+                      "recordkey" "TD_075370685332_000a"
+                      "recordtype" "misc"
+                      "title" "CHIPS-FF Reference Structures"
+                      "url" "https://github.com/usnistgov/chipsff/blob/main/chipsff/chemical_potentials.json"
+                      "year" ""}]
+ "title" "Test driver for computing test driver calculates vacancy formation energies and relaxation volume at zero temperature and zero pressure v000"}
