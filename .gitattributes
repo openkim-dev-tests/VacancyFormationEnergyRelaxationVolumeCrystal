@@ -2,3 +2,4 @@ output export-ignore
 local-props export-ignore
 local_props export-ignore
 run.py export-ignore
+test_generator_*.json export-ignore
